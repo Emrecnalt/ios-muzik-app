@@ -57,7 +57,13 @@ jobs:
       - name: Create Unsigned IPA
         run: |
           mkdir -p build/Payload
-          cp -r ios/build/Build/Products/Release-iphoneos/*.app build/Payload/
+          APP_PATH=$(find ios/build -name "*.app" | head -n 1)
+          if [ -z "$APP_PATH" ]; then
+            echo "Error: No .app bundle found!"
+            exit 1
+          fi
+          echo "Found App Bundle at: $APP_PATH"
+          cp -r "$APP_PATH" build/Payload/
           cd build
           zip -r ../muzik-app.ipa Payload
           cd ..
