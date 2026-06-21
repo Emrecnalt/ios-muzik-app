@@ -49,6 +49,7 @@ export default function LibraryScreen() {
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState<'all' | 'audio' | 'video' | 'playlists'>('all');
+  const [sortBy, setSortBy] = useState<'dateDesc' | 'dateAsc' | 'name' | 'sizeDesc'>('dateDesc');
 
   // Modal states
   const [createModalVisible, setCreateModalVisible] = useState(false);
@@ -189,12 +190,20 @@ export default function LibraryScreen() {
     });
   };
 
-  // Filtering downloads based on tab and search query
-  const filteredDownloads = downloads.filter(item => {
-    const matchesTab = activeTab === 'all' || item.type === activeTab;
-    const matchesSearch = item.name.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesTab && matchesSearch;
-  });
+  // Filtering and sorting downloads based on tab, search query, and sorting selection
+  const filteredDownloads = downloads
+    .filter(item => {
+      const matchesTab = activeTab === 'all' || item.type === activeTab;
+      const matchesSearch = item.name.toLowerCase().includes(searchQuery.toLowerCase());
+      return matchesTab && matchesSearch;
+    })
+    .sort((a, b) => {
+      if (sortBy === 'dateDesc') return b.dateAdded - a.dateAdded;
+      if (sortBy === 'dateAsc') return a.dateAdded - b.dateAdded;
+      if (sortBy === 'name') return a.name.localeCompare(b.name, 'tr');
+      if (sortBy === 'sizeDesc') return b.size - a.size;
+      return 0;
+    });
 
   const renderQualityBadge = (item: DownloadItem) => {
     const isLossless = item.mimeType?.includes('audio/wav') || 
@@ -370,6 +379,89 @@ export default function LibraryScreen() {
               onChangeText={setSearchQuery}
             />
           </View>
+        </View>
+      )}
+
+      {/* Sorting Chips */}
+      {activeTab !== 'playlists' && (
+        <View style={styles.sortContainer}>
+          <Text style={[styles.sortLabel, isDark ? styles.textSecondaryDark : styles.textSecondaryLight]}>
+            Sırala:
+          </Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.sortScroll}>
+            <TouchableOpacity
+              style={[
+                styles.sortChip,
+                isDark ? styles.sortChipDark : styles.sortChipLight,
+                sortBy === 'dateDesc' && styles.sortChipActive,
+              ]}
+              onPress={() => setSortBy('dateDesc')}
+            >
+              <Text
+                style={[
+                  styles.sortChipText,
+                  isDark ? styles.sortChipTextDark : styles.sortChipTextLight,
+                  sortBy === 'dateDesc' && styles.sortChipTextActive,
+                ]}
+              >
+                En Yeni
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.sortChip,
+                isDark ? styles.sortChipDark : styles.sortChipLight,
+                sortBy === 'dateAsc' && styles.sortChipActive,
+              ]}
+              onPress={() => setSortBy('dateAsc')}
+            >
+              <Text
+                style={[
+                  styles.sortChipText,
+                  isDark ? styles.sortChipTextDark : styles.sortChipTextLight,
+                  sortBy === 'dateAsc' && styles.sortChipTextActive,
+                ]}
+              >
+                En Eski
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.sortChip,
+                isDark ? styles.sortChipDark : styles.sortChipLight,
+                sortBy === 'name' && styles.sortChipActive,
+              ]}
+              onPress={() => setSortBy('name')}
+            >
+              <Text
+                style={[
+                  styles.sortChipText,
+                  isDark ? styles.sortChipTextDark : styles.sortChipTextLight,
+                  sortBy === 'name' && styles.sortChipTextActive,
+                ]}
+              >
+                İsim (A-Z)
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.sortChip,
+                isDark ? styles.sortChipDark : styles.sortChipLight,
+                sortBy === 'sizeDesc' && styles.sortChipActive,
+              ]}
+              onPress={() => setSortBy('sizeDesc')}
+            >
+              <Text
+                style={[
+                  styles.sortChipText,
+                  isDark ? styles.sortChipTextDark : styles.sortChipTextLight,
+                  sortBy === 'sizeDesc' && styles.sortChipTextActive,
+                ]}
+              >
+                Boyut
+              </Text>
+            </TouchableOpacity>
+          </ScrollView>
         </View>
       )}
 
@@ -995,5 +1087,52 @@ const styles = StyleSheet.create({
     backgroundColor: '#D946EF',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  sortContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    marginBottom: 12,
+  },
+  sortLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    marginRight: 8,
+  },
+  sortScroll: {
+    alignItems: 'center',
+  },
+  sortChip: {
+    paddingVertical: 5,
+    paddingHorizontal: 12,
+    borderRadius: 15,
+    marginRight: 6,
+    borderWidth: 1,
+  },
+  sortChipDark: {
+    backgroundColor: '#2D3748',
+    borderColor: '#4A5568',
+  },
+  sortChipLight: {
+    backgroundColor: '#EDF2F7',
+    borderColor: '#E2E8F0',
+  },
+  sortChipActive: {
+    backgroundColor: '#E53E3E',
+    borderColor: '#E53E3E',
+  },
+  sortChipText: {
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  sortChipTextDark: {
+    color: '#A0AEC0',
+  },
+  sortChipTextLight: {
+    color: '#4A5568',
+  },
+  sortChipTextActive: {
+    color: '#FFF',
+    fontWeight: '600',
   },
 });
