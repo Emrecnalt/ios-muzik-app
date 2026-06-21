@@ -12,6 +12,12 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Select Xcode 16
+        run: |
+          XCODE_PATH=$(ls -d /Applications/Xcode_16*.app | sort -V | tail -n 1)
+          echo "Selected Xcode: $XCODE_PATH"
+          sudo xcode-select -s "$XCODE_PATH/Contents/Developer"
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
