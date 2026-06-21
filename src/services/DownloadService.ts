@@ -40,7 +40,14 @@ export const getDownloads = async (): Promise<DownloadItem[]> => {
       return [];
     }
     const content = await FileSystem.readAsStringAsync(METADATA_FILE);
-    return JSON.parse(content);
+    const items = JSON.parse(content) as DownloadItem[];
+    return items.map(item => {
+      const fileName = item.localUri.split('/').pop();
+      return {
+        ...item,
+        localUri: `${DOWNLOAD_DIR}${fileName}`
+      };
+    });
   } catch (error) {
     console.error('Error reading downloads metadata:', error);
     return [];

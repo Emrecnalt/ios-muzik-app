@@ -83,24 +83,29 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
             if (data.queue && data.queue.length > 0) {
               const validQueue: DownloadItem[] = [];
               for (const item of data.queue) {
-                const itemInfo = await FileSystem.getInfoAsync(item.localUri);
+                const fileName = item.localUri ? item.localUri.split('/').pop() : '';
+                const resolvedUri = `${FileSystem.documentDirectory}downloads/${fileName}`;
+                const itemInfo = await FileSystem.getInfoAsync(resolvedUri);
                 if (itemInfo.exists) {
-                  validQueue.push(item);
+                  validQueue.push({ ...item, localUri: resolvedUri });
                 }
               }
               queueRef.current = validQueue;
               setQueue(validQueue);
             }
             if (data.currentMedia) {
-              const localFileInfo = await FileSystem.getInfoAsync(data.currentMedia.localUri);
+              const fileName = data.currentMedia.localUri ? data.currentMedia.localUri.split('/').pop() : '';
+              const resolvedUri = `${FileSystem.documentDirectory}downloads/${fileName}`;
+              const localFileInfo = await FileSystem.getInfoAsync(resolvedUri);
               if (localFileInfo.exists) {
-                currentMediaRef.current = data.currentMedia;
-                setCurrentMedia(data.currentMedia);
+                const resolvedMedia = { ...data.currentMedia, localUri: resolvedUri };
+                currentMediaRef.current = resolvedMedia;
+                setCurrentMedia(resolvedMedia);
                 setPosition(data.position || 0);
                 positionRef.current = data.position || 0;
 
                 const { sound } = await Audio.Sound.createAsync(
-                  { uri: data.currentMedia.localUri },
+                  { uri: resolvedUri },
                   { shouldPlay: false, positionMillis: data.position || 0 },
                   onPlaybackStatusUpdate
                 );
