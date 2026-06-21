@@ -1,0 +1,55 @@
+name: Build Unsigned iOS IPA
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-14
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Prebuild iOS project
+        run: npx expo prebuild --platform ios
+
+      - name: Build Xcode project (Unsigned)
+        run: |
+          cd ios
+          SCHEME_NAME=$(xcodebuild -list -workspace *.xcworkspace | grep -A 1 "Schemes:" | tail -n 1 | xargs)
+          echo "Building Scheme: $SCHEME_NAME"
+          xcodebuild -workspace *.xcworkspace \
+            -scheme "$SCHEME_NAME" \
+            -configuration Release \
+            -sdk iphoneos \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            PROVISIONING_PROFILE_SPECIFIER="" \
+            clean build
+
+      - name: Create Unsigned IPA
+        run: |
+          mkdir -p build/Payload
+          cp -r ios/build/Build/Products/Release-iphoneos/*.app build/Payload/
+          cd build
+          zip -r ../muzik-app.ipa Payload
+          cd ..
+
+      - name: Upload IPA Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: unsigned-ipa
+          path: muzik-app.ipa
