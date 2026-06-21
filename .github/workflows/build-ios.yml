@@ -24,6 +24,14 @@ jobs:
       - name: Prebuild iOS project
         run: npx expo prebuild --platform ios
 
+      - name: Install CocoaPods
+        run: |
+          cd ios
+          pod install
+
+      - name: List files in ios directory
+        run: ls -R ios
+
       - name: Build Xcode project (Unsigned)
         run: |
           cd ios
