@@ -30,21 +30,24 @@ jobs:
       - name: Prebuild iOS project
         run: npx expo prebuild --platform ios
 
+      - name: Disable CocoaPods targets code signing
+        run: node scripts/disable-pod-signing.js
+
       - name: Install CocoaPods
         run: |
           cd ios
           pod install
 
-      - name: List files in ios directory
-        run: ls -R ios
+      - name: List Xcode Schemes
+        run: |
+          cd ios
+          xcodebuild -list -workspace *.xcworkspace
 
       - name: Build Xcode project (Unsigned)
         run: |
           cd ios
-          SCHEME_NAME=$(xcodebuild -list -workspace *.xcworkspace | grep -A 1 "Schemes:" | tail -n 1 | xargs)
-          echo "Building Scheme: $SCHEME_NAME"
           xcodebuild -workspace *.xcworkspace \
-            -scheme "$SCHEME_NAME" \
+            -scheme "muzikapp" \
             -configuration Release \
             -sdk iphoneos \
             -archivePath build/App.xcarchive \
