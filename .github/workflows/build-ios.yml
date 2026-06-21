@@ -57,13 +57,11 @@ jobs:
       - name: Create Unsigned IPA
         run: |
           mkdir -p build/Payload
-          echo "Searching for .app bundles in the entire workspace..."
-          find . -name "*.app"
+          echo "Listing all files in Products directory recursively..."
+          find ios/build/Build/Products
           APP_PATH=$(find . -name "*.app" | grep -v "node_modules" | head -n 1)
           if [ -z "$APP_PATH" ]; then
             echo "Error: No .app bundle found!"
-            echo "Displaying repository file structure for debugging:"
-            find . -maxdepth 4 -not -path '*/.*' -not -path './node_modules*'
             exit 1
           fi
           echo "Found App Bundle at: $APP_PATH"
