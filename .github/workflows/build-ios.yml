@@ -47,22 +47,26 @@ jobs:
             -scheme "$SCHEME_NAME" \
             -configuration Release \
             -sdk iphoneos \
-            -derivedDataPath build \
+            -archivePath build/App.xcarchive \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
             PROVISIONING_PROFILE_SPECIFIER="" \
-            clean build
+            archive
 
       - name: Create Unsigned IPA
         run: |
           mkdir -p build/Payload
-          echo "Listing all files in Products directory recursively..."
-          find ios/build/Build/Products
-          APP_PATH=$(find . -name "*.app" | grep -v "node_modules" | head -n 1)
+          echo "Searching for .app bundle in the xcarchive..."
+          APP_PATH=$(find ios/build/App.xcarchive -name "*.app" | head -n 1)
           if [ -z "$APP_PATH" ]; then
-            echo "Error: No .app bundle found!"
-            exit 1
+            echo "Error: No .app bundle found in App.xcarchive!"
+            echo "Searching entire workspace for any .app bundle..."
+            APP_PATH=$(find . -name "*.app" | grep -v "node_modules" | head -n 1)
+            if [ -z "$APP_PATH" ]; then
+              echo "Error: Absolutely no .app bundle found!"
+              exit 1
+            fi
           fi
           echo "Found App Bundle at: $APP_PATH"
           cp -r "$APP_PATH" build/Payload/
