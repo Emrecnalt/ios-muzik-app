@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { Audio, AVPlaybackStatus, InterruptionModeIOS, InterruptionModeAndroid } from 'expo-av';
+import * as FileSystem from 'expo-file-system/legacy';
 
 import { DownloadItem } from '@/services/DownloadService';
 
@@ -36,9 +37,31 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const currentMediaRef = useRef<DownloadItem | null>(null);
   const queueRef = useRef<DownloadItem[]>([]);
   const nextMediaRef = useRef<() => Promise<void>>(async () => {});
+  const positionRef = useRef<number>(0);
+
+  const savePlaybackState = async (media: DownloadItem | null, activeQueue: DownloadItem[], lastPosition: number) => {
+    try {
+      const dir = `${FileSystem.documentDirectory}downloads/`;
+      const dirInfo = await FileSystem.getInfoAsync(dir);
+      if (!dirInfo.exists) {
+        await FileSystem.makeDirectoryAsync(dir, { intermediates: true });
+      }
+      const stateFile = `${dir}playback_state.json`;
+      await FileSystem.writeAsStringAsync(
+        stateFile,
+        JSON.stringify({
+          currentMedia: media,
+          queue: activeQueue,
+          position: lastPosition
+        })
+      );
+    } catch (error) {
+      console.error('Failed to save playback state:', error);
+    }
+  };
 
   useEffect(() => {
-    const setupAudio = async () => {
+    const setupAudioAndLoadState = async () => {
       try {
         await Audio.setAudioModeAsync({
           allowsRecordingIOS: false,
@@ -49,12 +72,49 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           shouldDuckAndroid: true,
           playThroughEarpieceAndroid: false,
         });
+
+        // Load saved state
+        const stateFile = `${FileSystem.documentDirectory}downloads/playback_state.json`;
+        const fileInfo = await FileSystem.getInfoAsync(stateFile);
+        if (fileInfo.exists) {
+          const content = await FileSystem.readAsStringAsync(stateFile);
+          const data = JSON.parse(content);
+          if (data) {
+            if (data.queue && data.queue.length > 0) {
+              const validQueue: DownloadItem[] = [];
+              for (const item of data.queue) {
+                const itemInfo = await FileSystem.getInfoAsync(item.localUri);
+                if (itemInfo.exists) {
+                  validQueue.push(item);
+                }
+              }
+              queueRef.current = validQueue;
+              setQueue(validQueue);
+            }
+            if (data.currentMedia) {
+              const localFileInfo = await FileSystem.getInfoAsync(data.currentMedia.localUri);
+              if (localFileInfo.exists) {
+                currentMediaRef.current = data.currentMedia;
+                setCurrentMedia(data.currentMedia);
+                setPosition(data.position || 0);
+                positionRef.current = data.position || 0;
+
+                const { sound } = await Audio.Sound.createAsync(
+                  { uri: data.currentMedia.localUri },
+                  { shouldPlay: false, positionMillis: data.position || 0 },
+                  onPlaybackStatusUpdate
+                );
+                soundRef.current = sound;
+              }
+            }
+          }
+        }
       } catch (error) {
-        console.error('Failed to setup audio mode:', error);
+        console.error('Failed to setup audio and load state:', error);
       }
     };
 
-    setupAudio();
+    setupAudioAndLoadState();
 
     return () => {
       soundRef.current?.unloadAsync();
@@ -67,6 +127,7 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
     if (status.isLoaded) {
       setPosition(status.positionMillis);
+      positionRef.current = status.positionMillis;
       setDuration(status.durationMillis || 0);
       setIsPlaying(status.isPlaying);
 
@@ -92,6 +153,7 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       setCurrentMedia(item);
       setIsPlaying(true);
       setPosition(0);
+      positionRef.current = 0;
       setDuration(0);
 
       if (newQueue) {
@@ -110,6 +172,7 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       );
 
       soundRef.current = sound;
+      await savePlaybackState(item, newQueue || queueRef.current, 0);
     } catch (error) {
       console.error('Error in playMedia:', error);
       setIsPlaying(false);
@@ -120,6 +183,9 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     try {
       await soundRef.current?.pauseAsync();
       setIsPlaying(false);
+      if (currentMediaRef.current) {
+        await savePlaybackState(currentMediaRef.current, queueRef.current, positionRef.current);
+      }
     } catch (error) {
       console.error('Error pausing media:', error);
     }
@@ -150,7 +216,9 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       setCurrentMedia(null);
       setIsPlaying(false);
       setPosition(0);
+      positionRef.current = 0;
       setDuration(0);
+      await savePlaybackState(null, [], 0);
     } catch (error) {
       console.error('Error stopping media:', error);
     }
@@ -160,6 +228,10 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     try {
       await soundRef.current?.setPositionAsync(positionMs);
       setPosition(positionMs);
+      positionRef.current = positionMs;
+      if (currentMediaRef.current) {
+        await savePlaybackState(currentMediaRef.current, queueRef.current, positionMs);
+      }
     } catch (error) {
       console.error('Error seeking media:', error);
     }
@@ -208,6 +280,23 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     queueRef.current = [];
     setQueue([]);
   };
+
+  // Periodically save state during active playback (every 5 seconds)
+  useEffect(() => {
+    let interval: any;
+    if (isPlaying) {
+      interval = setInterval(() => {
+        if (currentMediaRef.current) {
+          savePlaybackState(currentMediaRef.current, queueRef.current, positionRef.current);
+        }
+      }, 5000);
+    }
+    return () => {
+      if (interval) {
+        clearInterval(interval);
+      }
+    };
+  }, [isPlaying]);
 
   useEffect(() => {
     nextMediaRef.current = nextMedia;
