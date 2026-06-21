@@ -8,6 +8,7 @@
     "scheme": "muzikapp",
     "userInterfaceStyle": "automatic",
     "ios": {
+      "bundleIdentifier": "com.emrecnalt.muzikapp",
       "icon": "./assets/expo.icon",
       "infoPlist": {
         "UIBackgroundModes": [
