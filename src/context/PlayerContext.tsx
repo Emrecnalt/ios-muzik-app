@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
-import { Audio, AVPlaybackStatus, InterruptionModeIOS, InterruptionModeAndroid } from 'expo-av';
+import { createAudioPlayer, setAudioModeAsync, AudioPlayer, AudioStatus } from 'expo-audio';
 import * as FileSystem from 'expo-file-system/legacy';
 
 import { DownloadItem } from '@/services/DownloadService';
@@ -9,7 +9,7 @@ interface PlayerContextType {
   currentMedia: DownloadItem | null;
   position: number;
   duration: number;
-  playbackStatus: AVPlaybackStatus | null;
+  playbackStatus: AudioStatus | null;
   queue: DownloadItem[];
   playMedia: (item: DownloadItem, newQueue?: DownloadItem[]) => Promise<void>;
   pauseMedia: () => Promise<void>;
@@ -30,10 +30,11 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [currentMedia, setCurrentMedia] = useState<DownloadItem | null>(null);
   const [position, setPosition] = useState(0);
   const [duration, setDuration] = useState(0);
-  const [playbackStatus, setPlaybackStatus] = useState<AVPlaybackStatus | null>(null);
+  const [playbackStatus, setPlaybackStatus] = useState<AudioStatus | null>(null);
   const [queue, setQueue] = useState<DownloadItem[]>([]);
 
-  const soundRef = useRef<Audio.Sound | null>(null);
+  const playerRef = useRef<AudioPlayer | null>(null);
+  const subscriptionRef = useRef<any>(null);
   const currentMediaRef = useRef<DownloadItem | null>(null);
   const queueRef = useRef<DownloadItem[]>([]);
   const nextMediaRef = useRef<() => Promise<void>>(async () => {});
@@ -63,14 +64,10 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   useEffect(() => {
     const setupAudioAndLoadState = async () => {
       try {
-        await Audio.setAudioModeAsync({
-          allowsRecordingIOS: false,
-          staysActiveInBackground: true,
-          playsInSilentModeIOS: true,
-          interruptionModeIOS: InterruptionModeIOS.DoNotMix,
-          interruptionModeAndroid: InterruptionModeAndroid.DoNotMix,
-          shouldDuckAndroid: true,
-          playThroughEarpieceAndroid: false,
+        await setAudioModeAsync({
+          playsInSilentMode: true,
+          shouldPlayInBackground: true,
+          interruptionMode: 'doNotMix',
         });
 
         // Load saved state
@@ -104,12 +101,30 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
                 setPosition(data.position || 0);
                 positionRef.current = data.position || 0;
 
-                const { sound } = await Audio.Sound.createAsync(
-                  { uri: resolvedUri },
-                  { shouldPlay: false, positionMillis: data.position || 0 },
-                  onPlaybackStatusUpdate
-                );
-                soundRef.current = sound;
+                const player = createAudioPlayer({ uri: resolvedUri }, { updateInterval: 500 });
+                playerRef.current = player;
+
+                // Setup status listener
+                subscriptionRef.current = player.addListener('playbackStatusUpdate', (status) => {
+                  setIsPlaying(status.playing);
+                  setPosition(status.currentTime * 1000);
+                  positionRef.current = status.currentTime * 1000;
+                  setDuration(status.duration * 1000);
+                  setPlaybackStatus(status);
+
+                  if (status.didJustFinish) {
+                    nextMediaRef.current();
+                  }
+                });
+
+                // Seek to initial position (seekTo takes seconds)
+                await player.seekTo((data.position || 0) / 1000);
+
+                // Set lock screen active info
+                player.setActiveForLockScreen(true, {
+                  title: resolvedMedia.name,
+                  artist: resolvedMedia.type === 'audio' ? 'Yerel Ses Dosyası' : 'Yerel Video Dosyası',
+                });
               }
             }
           }
@@ -122,36 +137,18 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     setupAudioAndLoadState();
 
     return () => {
-      soundRef.current?.unloadAsync();
-      soundRef.current = null;
+      subscriptionRef.current?.remove();
+      playerRef.current?.remove();
+      playerRef.current = null;
     };
   }, []);
 
-  const onPlaybackStatusUpdate = (status: AVPlaybackStatus) => {
-    setPlaybackStatus(status);
-
-    if (status.isLoaded) {
-      setPosition(status.positionMillis);
-      positionRef.current = status.positionMillis;
-      setDuration(status.durationMillis || 0);
-      setIsPlaying(status.isPlaying);
-
-      if (status.didJustFinish) {
-        nextMediaRef.current();
-      }
-      return;
-    }
-
-    if (status.error) {
-      console.error(`Playback error: ${status.error}`);
-    }
-  };
-
   const playMedia = async (item: DownloadItem, newQueue?: DownloadItem[]) => {
     try {
-      if (soundRef.current) {
-        await soundRef.current.unloadAsync();
-        soundRef.current = null;
+      if (playerRef.current) {
+        subscriptionRef.current?.remove();
+        playerRef.current.remove();
+        playerRef.current = null;
       }
 
       currentMediaRef.current = item;
@@ -170,13 +167,30 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         setQueue(updatedQueue);
       }
 
-      const { sound } = await Audio.Sound.createAsync(
-        { uri: item.localUri },
-        { shouldPlay: true },
-        onPlaybackStatusUpdate
-      );
+      const player = createAudioPlayer({ uri: item.localUri }, { updateInterval: 500 });
+      playerRef.current = player;
 
-      soundRef.current = sound;
+      // Setup status listener
+      subscriptionRef.current = player.addListener('playbackStatusUpdate', (status) => {
+        setIsPlaying(status.playing);
+        setPosition(status.currentTime * 1000);
+        positionRef.current = status.currentTime * 1000;
+        setDuration(status.duration * 1000);
+        setPlaybackStatus(status);
+
+        if (status.didJustFinish) {
+          nextMediaRef.current();
+        }
+      });
+
+      player.play();
+
+      // Set lock screen info
+      player.setActiveForLockScreen(true, {
+        title: item.name,
+        artist: item.type === 'audio' ? 'Yerel Ses Dosyası' : 'Yerel Video Dosyası',
+      });
+
       await savePlaybackState(item, newQueue || queueRef.current, 0);
     } catch (error) {
       console.error('Error in playMedia:', error);
@@ -186,7 +200,7 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   const pauseMedia = async () => {
     try {
-      await soundRef.current?.pauseAsync();
+      playerRef.current?.pause();
       setIsPlaying(false);
       if (currentMediaRef.current) {
         await savePlaybackState(currentMediaRef.current, queueRef.current, positionRef.current);
@@ -198,8 +212,8 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   const resumeMedia = async () => {
     try {
-      if (soundRef.current) {
-        await soundRef.current.playAsync();
+      if (playerRef.current) {
+        playerRef.current.play();
         setIsPlaying(true);
       } else if (currentMediaRef.current) {
         await playMedia(currentMediaRef.current, queueRef.current);
@@ -211,10 +225,10 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   const stopMedia = async () => {
     try {
-      if (soundRef.current) {
-        await soundRef.current.stopAsync();
-        await soundRef.current.unloadAsync();
-        soundRef.current = null;
+      if (playerRef.current) {
+        subscriptionRef.current?.remove();
+        playerRef.current.remove();
+        playerRef.current = null;
       }
 
       currentMediaRef.current = null;
@@ -231,7 +245,7 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   const seekMedia = async (positionMs: number) => {
     try {
-      await soundRef.current?.setPositionAsync(positionMs);
+      await playerRef.current?.seekTo(positionMs / 1000);
       setPosition(positionMs);
       positionRef.current = positionMs;
       if (currentMediaRef.current) {

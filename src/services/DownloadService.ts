@@ -159,7 +159,7 @@ const fetchYoutubeMediaLink = async (
   const videoTitle = convertData.title || `YouTube_Media_${Date.now()}`;
 
   // Step 3: Poll progress until completed
-  let pollAttempts = 20;
+  let pollAttempts = 35;
   while (pollAttempts > 0) {
     await new Promise(resolve => setTimeout(resolve, 2000));
 
@@ -201,8 +201,13 @@ export const fetchMediaLink = async (
   // Check if it is a YouTube URL
   const isYouTube = videoUrl.match(/(youtube\.com|youtu\.be|youtube-nocookie\.com)/i);
   if (isYouTube) {
-    console.log('YouTube link detected. Using ytmp3.mobi bypass API...');
-    return fetchYoutubeMediaLink(videoUrl, type);
+    try {
+      console.log('YouTube link detected. Using ytmp3.mobi bypass API...');
+      return await fetchYoutubeMediaLink(videoUrl, type);
+    } catch (error) {
+      console.warn('YouTube bypass API failed, trying Cobalt API fallback...', error);
+      // Fall through to Cobalt API fallback below
+    }
   }
 
   console.log('Non-YouTube link. Using Cobalt API fallback...');
