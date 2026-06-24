@@ -18,7 +18,11 @@ const cleanupPlayer = () => {
   }
   if (globalPlayer) {
     try {
+      globalPlayer.pause();
       globalPlayer.remove();
+      if (typeof (globalPlayer as any).release === 'function') {
+        (globalPlayer as any).release();
+      }
     } catch (e) {
       console.warn('Failed to remove global player:', e);
     }
@@ -132,7 +136,11 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
                 cleanupPlayer();
                 const player = createAudioPlayer({ uri: resolvedUri }, { updateInterval: 500 });
                 if (!active) {
+                  player.pause();
                   player.remove();
+                  if (typeof (player as any).release === 'function') {
+                    (player as any).release();
+                  }
                   return;
                 }
                 globalPlayer = player;
