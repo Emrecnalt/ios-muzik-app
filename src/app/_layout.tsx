@@ -1,7 +1,7 @@
 import { Tabs } from 'expo-router';
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { useColorScheme } from 'react-native';
-import { Music, Library } from 'lucide-react-native';
+import { Music, Library, Youtube } from 'lucide-react-native';
 
 import { PlayerProvider } from '@/context/PlayerContext';
 import PlayerBar from '@/components/PlayerBar';
@@ -33,6 +33,15 @@ export default function TabLayout() {
               title: 'İndirici',
               tabBarIcon: ({ color }) => (
                 <Music size={22} color={color} />
+              ),
+            }}
+          />
+          <Tabs.Screen
+            name="youtube"
+            options={{
+              title: 'YouTube',
+              tabBarIcon: ({ color }) => (
+                <Youtube size={22} color={color} />
               ),
             }}
           />
