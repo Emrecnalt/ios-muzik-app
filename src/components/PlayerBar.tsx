@@ -66,6 +66,36 @@ export default function PlayerBar() {
     }
   }, [isPlaying, currentMedia]);
 
+  // Unload video when component unmounts or when media changes/is not video
+  useEffect(() => {
+    const currentVideo = videoRef.current;
+    return () => {
+      if (currentVideo) {
+        currentVideo.unloadAsync().catch(() => {});
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (currentMedia?.type !== 'video' && videoRef.current) {
+      videoRef.current.unloadAsync().catch(() => {});
+    }
+  }, [currentMedia]);
+
+  // Keep the video visually in sync with the audio player position
+  useEffect(() => {
+    if (!videoRef.current || currentMedia?.type !== 'video' || isSliding) return;
+
+    videoRef.current.getStatusAsync().then((status) => {
+      if (status.isLoaded) {
+        const diff = Math.abs(status.positionMillis - position);
+        if (diff > 1500) {
+          videoRef.current?.setPositionAsync(position);
+        }
+      }
+    });
+  }, [position, currentMedia, isSliding]);
+
   if (!currentMedia) return null;
 
   const progressValue = duration > 0 ? position / duration : 0;
@@ -87,6 +117,9 @@ export default function PlayerBar() {
   const handleSliderSlidingComplete = async (value: number) => {
     const targetPosition = value * duration;
     await seekMedia(targetPosition);
+    if (videoRef.current && currentMedia?.type === 'video') {
+      await videoRef.current.setPositionAsync(targetPosition);
+    }
     setIsSliding(false);
   };
 
@@ -180,9 +213,10 @@ export default function PlayerBar() {
                     ref={videoRef}
                     style={styles.videoPlayer}
                     source={{ uri: currentMedia.localUri }}
-                    useNativeControls
+                    useNativeControls={false}
+                    isMuted={true}
                     resizeMode={ResizeMode.CONTAIN}
-                    isLooping
+                    isLooping={false}
                   />
                 ) : (
                   <View style={[styles.largeArt, isDark ? styles.largeArtDark : styles.largeArtLight]}>

@@ -4,6 +4,28 @@ import * as FileSystem from 'expo-file-system/legacy';
 
 import { DownloadItem } from '@/services/DownloadService';
 
+let globalPlayer: AudioPlayer | null = null;
+let globalSubscription: any = null;
+
+const cleanupPlayer = () => {
+  if (globalSubscription) {
+    try {
+      globalSubscription.remove();
+    } catch (e) {
+      console.warn('Failed to remove global subscription:', e);
+    }
+    globalSubscription = null;
+  }
+  if (globalPlayer) {
+    try {
+      globalPlayer.remove();
+    } catch (e) {
+      console.warn('Failed to remove global player:', e);
+    }
+    globalPlayer = null;
+  }
+};
+
 interface PlayerContextType {
   isPlaying: boolean;
   currentMedia: DownloadItem | null;
@@ -62,6 +84,7 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   };
 
   useEffect(() => {
+    let active = true;
     const setupAudioAndLoadState = async () => {
       try {
         await setAudioModeAsync({
@@ -69,12 +92,15 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           shouldPlayInBackground: true,
           interruptionMode: 'doNotMix',
         });
+        if (!active) return;
 
         // Load saved state
         const stateFile = `${FileSystem.documentDirectory}downloads/playback_state.json`;
         const fileInfo = await FileSystem.getInfoAsync(stateFile);
+        if (!active) return;
         if (fileInfo.exists) {
           const content = await FileSystem.readAsStringAsync(stateFile);
+          if (!active) return;
           const data = JSON.parse(content);
           if (data) {
             if (data.queue && data.queue.length > 0) {
@@ -87,6 +113,7 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
                   validQueue.push({ ...item, localUri: resolvedUri });
                 }
               }
+              if (!active) return;
               queueRef.current = validQueue;
               setQueue(validQueue);
             }
@@ -94,6 +121,7 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
               const fileName = data.currentMedia.localUri ? data.currentMedia.localUri.split('/').pop() : '';
               const resolvedUri = `${FileSystem.documentDirectory}downloads/${fileName}`;
               const localFileInfo = await FileSystem.getInfoAsync(resolvedUri);
+              if (!active) return;
               if (localFileInfo.exists) {
                 const resolvedMedia = { ...data.currentMedia, localUri: resolvedUri };
                 currentMediaRef.current = resolvedMedia;
@@ -101,11 +129,17 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
                 setPosition(data.position || 0);
                 positionRef.current = data.position || 0;
 
+                cleanupPlayer();
                 const player = createAudioPlayer({ uri: resolvedUri }, { updateInterval: 500 });
+                if (!active) {
+                  player.remove();
+                  return;
+                }
+                globalPlayer = player;
                 playerRef.current = player;
 
                 // Setup status listener
-                subscriptionRef.current = player.addListener('playbackStatusUpdate', (status) => {
+                globalSubscription = player.addListener('playbackStatusUpdate', (status) => {
                   setIsPlaying(status.playing);
                   setPosition(status.currentTime * 1000);
                   positionRef.current = status.currentTime * 1000;
@@ -116,9 +150,11 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
                     nextMediaRef.current();
                   }
                 });
+                subscriptionRef.current = globalSubscription;
 
                 // Seek to initial position (seekTo takes seconds)
                 await player.seekTo((data.position || 0) / 1000);
+                if (!active) return;
 
                 // Set lock screen active info
                 player.setActiveForLockScreen(true, {
@@ -137,19 +173,18 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     setupAudioAndLoadState();
 
     return () => {
-      subscriptionRef.current?.remove();
-      playerRef.current?.remove();
+      active = false;
+      cleanupPlayer();
       playerRef.current = null;
+      subscriptionRef.current = null;
     };
   }, []);
 
   const playMedia = async (item: DownloadItem, newQueue?: DownloadItem[]) => {
     try {
-      if (playerRef.current) {
-        subscriptionRef.current?.remove();
-        playerRef.current.remove();
-        playerRef.current = null;
-      }
+      cleanupPlayer();
+      playerRef.current = null;
+      subscriptionRef.current = null;
 
       currentMediaRef.current = item;
       setCurrentMedia(item);
@@ -168,10 +203,11 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       }
 
       const player = createAudioPlayer({ uri: item.localUri }, { updateInterval: 500 });
+      globalPlayer = player;
       playerRef.current = player;
 
       // Setup status listener
-      subscriptionRef.current = player.addListener('playbackStatusUpdate', (status) => {
+      globalSubscription = player.addListener('playbackStatusUpdate', (status) => {
         setIsPlaying(status.playing);
         setPosition(status.currentTime * 1000);
         positionRef.current = status.currentTime * 1000;
@@ -182,6 +218,7 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           nextMediaRef.current();
         }
       });
+      subscriptionRef.current = globalSubscription;
 
       player.play();
 
@@ -225,11 +262,9 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   const stopMedia = async () => {
     try {
-      if (playerRef.current) {
-        subscriptionRef.current?.remove();
-        playerRef.current.remove();
-        playerRef.current = null;
-      }
+      cleanupPlayer();
+      playerRef.current = null;
+      subscriptionRef.current = null;
 
       currentMediaRef.current = null;
       setCurrentMedia(null);

@@ -68,20 +68,9 @@ export const isDownloaded = async (originalUrl: string): Promise<boolean> => {
 
 // Helper function to extract YouTube Video ID from various URL formats
 const getYoutubeVideoId = (url: string): string | null => {
-  const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=|^youtube.com\/shorts\/)([^#\&\?]*).*/;
+  const regExp = /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/|youtube\.com\/shorts\/)([a-zA-Z0-9\-_]{11})/;
   const match = url.match(regExp);
-  if (match && match[2].length === 11) {
-    return match[2];
-  }
-  if (url.includes('youtube.com/shorts/')) {
-    const shortsMatch = /\/shorts\/([a-zA-Z0-9\-\_]{11})/.exec(url);
-    if (shortsMatch) return shortsMatch[1];
-  }
-  if (url.includes('youtu.be/')) {
-    const youtubebeMatch = /\/([a-zA-Z0-9\-\_]{11})/.exec(url);
-    if (youtubebeMatch) return youtubebeMatch[1];
-  }
-  return null;
+  return match ? match[1] : null;
 };
 
 // Custom resolver using ytmp3.mobi API to bypass YouTube blocks

@@ -27,6 +27,7 @@ import {
   downloadMedia,
   getCobaltEndpoint,
   setCobaltEndpoint,
+  isDownloaded,
 } from '@/services/DownloadService';
 import { usePlayer } from '@/context/PlayerContext';
 
@@ -81,6 +82,13 @@ export default function DownloaderScreen() {
     // Check if already in active downloads
     if (activeDownloads.some(dl => dl.url === url && dl.status === 'downloading')) {
       Alert.alert('Bilgi', 'Bu dosya zaten indiriliyor.');
+      return;
+    }
+
+    // Check if already downloaded
+    const alreadyDownloaded = await isDownloaded(url);
+    if (alreadyDownloaded) {
+      Alert.alert('Bilgi', 'Bu dosya zaten kütüphanenizde mevcut.');
       return;
     }
 
@@ -489,7 +497,6 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 28,
     fontWeight: 'bold',
-    fontFamily: 'system-ui',
   },
   headerButtons: {
     flexDirection: 'row',

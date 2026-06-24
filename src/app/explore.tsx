@@ -43,7 +43,7 @@ import { usePlayer } from '@/context/PlayerContext';
 export default function LibraryScreen() {
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
-  const { currentMedia, isPlaying, playMedia, pauseMedia, resumeMedia } = usePlayer();
+  const { currentMedia, isPlaying, playMedia, pauseMedia, resumeMedia, stopMedia, removeFromQueue } = usePlayer();
 
   const [downloads, setDownloads] = useState<DownloadItem[]>([]);
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
@@ -87,6 +87,10 @@ export default function LibraryScreen() {
           text: 'Sil',
           style: 'destructive',
           onPress: async () => {
+            if (currentMedia?.id === item.id) {
+              await stopMedia();
+            }
+            removeFromQueue(item.id);
             const updated = await deleteDownload(item.id);
             setDownloads(updated);
             // Refresh playlists as items inside them might have been deleted
@@ -659,7 +663,7 @@ export default function LibraryScreen() {
                 Liste Boş
               </Text>
               <Text style={[styles.emptySubtitle, isDark ? styles.textSecondaryDark : styles.textSecondaryLight]}>
-                Bu oynatma listesinde henüz hiçbir dosya bulunmamaktadır. Kütüphane ekranındaki dosyalardan "Oynatma Listesine Ekle" seçeneği ile ekleyin!
+                Bu oynatma listesinde henüz hiçbir dosya bulunmamaktadır. Kütüphane ekranındaki dosyalardan &quot;Oynatma Listesine Ekle&quot; seçeneği ile ekleyin!
               </Text>
             </View>
           )}
